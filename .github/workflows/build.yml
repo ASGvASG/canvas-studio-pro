@@ -53,10 +53,10 @@ jobs:
           rm -rf cmdline-tools.zip cmdline-tools-tmp
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          # Use absolute path to bypass PATH issues
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | $SDKMANAGER --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+          $SDKMANAGER --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
       - name: Ensure Android platform exists
         run: |
@@ -137,7 +137,9 @@ jobs:
         run: flutter pub get
 
       - name: Build Linux Bundle
-        run: flutter build linux --release --target-platform=${{ matrix.target_platform }}
+        run: |
+          set -x
+          flutter build linux --release --target-platform=${{ matrix.target_platform }} || (echo "Build failed, listing dir:" && ls -R build/linux && exit 1)
 
       - name: Package Linux artifacts
         shell: bash
@@ -226,7 +228,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows Executable
-        run: flutter build windows --release --no-pub
+        run: flutter build windows --release --no-pub || (echo "Windows Build Failed, listing:" && dir /s build\windows && exit 1)
 
       - name: Package Windows Release
         shell: pwsh
