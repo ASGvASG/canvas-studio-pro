@@ -174,7 +174,7 @@ class CanvasPainter extends CustomPainter {
       canvas.saveLayer(
         pageRect,
         Paint()
-          ..color = Colors.white.withOpacity(layer.opacity)
+          ..color = Color.fromRGBO(255, 255, 255, layer.opacity)
           ..blendMode = layer.blendMode,
       );
 
@@ -190,13 +190,13 @@ class CanvasPainter extends CustomPainter {
 
       // Draw all strokes in this layer
       for (var stroke in layer.strokes) {
-        _drawStroke(canvas, stroke);
+        CanvasPainter.drawStroke(canvas, stroke);
       }
 
       // Draw the active stroke if it belongs to this layer
       if (currentStroke != null && layers.firstWhere((l) => l.isVisible).id == layer.id) {
         // If currentStroke is drawing, show it in real-time
-        _drawStroke(canvas, currentStroke!);
+        CanvasPainter.drawStroke(canvas, currentStroke!);
       }
 
       canvas.restore();

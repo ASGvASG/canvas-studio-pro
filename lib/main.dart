@@ -338,7 +338,7 @@ class _MainStudioScreenState extends State<MainStudioScreen> {
         canvas.saveLayer(
           pageRect,
           Paint()
-            ..color = Colors.white.withOpacity(layer.opacity)
+            ..color = Color.fromRGBO(255, 255, 255, layer.opacity)
             ..blendMode = layer.blendMode,
         );
 
@@ -347,7 +347,7 @@ class _MainStudioScreenState extends State<MainStudioScreen> {
             layer.image!,
             Rect.fromLTWH(0, 0, layer.image!.width.toDouble(), layer.image!.height.toDouble()),
             pageRect,
-            Paint()..filterQuality = ui.FilterQuality.high,
+            Paint()..filterQuality = FilterQuality.high,
           );
         }
 
