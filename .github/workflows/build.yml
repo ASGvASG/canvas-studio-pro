@@ -139,6 +139,9 @@ jobs:
       - name: Build Linux Bundle
         run: |
           set -x
+          ls -la
+          echo "CURRENT_DIR: $PWD"
+          find . -maxdepth 3
           flutter build linux --release --target-platform=${{ matrix.target_platform }} || (echo "Build failed, listing dir:" && ls -R build/linux && exit 1)
 
       - name: Package Linux artifacts
@@ -180,10 +183,10 @@ jobs:
             cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
             fpm -s dir -t deb -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
               --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
-              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb"
+              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb" --verbose
             fpm -s dir -t rpm -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
               --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
-              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm"
+              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm" --verbose
             "$HOME/.local/bin/appimagetool" "$APPDIR" "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.AppImage"
           fi
 
