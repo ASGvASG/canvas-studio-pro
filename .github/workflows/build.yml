@@ -2,11 +2,8 @@ name: Build CanvasStudio Pro (Android, Windows, Linux)
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 jobs:
@@ -20,7 +17,7 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'oracle'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Set up Flutter
@@ -28,33 +25,63 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android Native Project
-        run: |
-          mkdir -p backup
-          cp -r lib pubspec.yaml backup/
-          flutter create --platforms=android --org com.canvasstudio.pro .
-          cp -r backup/* .
-          rm -rf backup
-
       - name: Install Dependencies
         run: flutter pub get
 
       - name: Build APK
         run: |
-          flutter build apk --release > android_build.log 2>&1
-
-      - name: Upload Android Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: android_build.log
+          flutter build apk --release
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
           name: canvas-studio-android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-linux:
+    name: Build Linux (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev binutils-aarch64-linux-gnu
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Enable Linux Desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Install Pub Dependencies
+        run: flutter pub get
+
+      - name: Build Linux Binary
+        run: flutter build linux --release --target-platform=linux-${{ matrix.arch == 'x64' && 'x64' || 'arm64' }}
+
+      - name: Package Release
+        run: |
+          # Simplified packaging logic for demonstration
+          mkdir -p packaging
+          tar -czf packaging/canvas-studio-linux-${{ matrix.arch }}.tar.gz -C build/linux/*/release/bundle .
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvas-studio-linux-${{ matrix.arch }}
+          path: packaging/canvas-studio-linux-${{ matrix.arch }}.tar.gz
 
   build-windows:
     name: Build Windows App
@@ -67,15 +94,6 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-
-      - name: Create Windows Native Project
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path backup
-          Copy-Item -Recurse -Force -Path lib, pubspec.yaml -Destination backup
-          flutter create --platforms=windows --org com.canvasstudio.pro .
-          Copy-Item -Recurse -Force -Path backup\* -Destination .
-          Remove-Item -Recurse -Force -Path backup
 
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
@@ -97,47 +115,24 @@ jobs:
           name: canvas-studio-windows-app
           path: build/windows/canvas-studio-windows-release.zip
 
-  build-linux:
-    name: Build Linux App
+  create-release:
+    name: Create GitHub Release
+    needs: [build-android, build-linux, build-windows]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
 
-      - name: Install Linux Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          channel: 'stable'
-
-      - name: Create Linux Native Project
-        run: |
-          mkdir -p backup
-          cp -r lib pubspec.yaml backup/
-          flutter create --platforms=linux --org com.canvasstudio.pro .
-          cp -r backup/* .
-          rm -rf backup
-
-      - name: Enable Linux Desktop
-        run: flutter config --enable-linux-desktop
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build Linux Binary
-        run: flutter build linux --release
-
-      - name: Package Release
-        run: |
-          cd build/linux/x64/release/
-          tar -czf ../../../canvas-studio-linux-release.tar.gz bundle/
-
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: canvas-studio-linux-app
-          path: canvas-studio-linux-release.tar.gz
+          name: CanvasStudio Pro v0.0.1-beta.1
+          body: |
+            # Release v0.0.1-beta.1
+            Initial beta release of CanvasStudio Pro.
+          files: |
+            canvas-studio-android-apk/app-release.apk
+            canvas-studio-linux-x64/canvas-studio-linux-x64.tar.gz
+            canvas-studio-linux-arm64/canvas-studio-linux-arm64.tar.gz
+            canvas-studio-windows-app/canvas-studio-windows-release.zip
