@@ -40,7 +40,15 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release > android_build.log 2>&1
+
+      - name: Upload Android Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android_build.log
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
