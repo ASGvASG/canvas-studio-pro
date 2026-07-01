@@ -39,6 +39,8 @@ jobs:
       - name: Install Android SDK (for Ubuntu runners)
         if: runner.os == 'Linux'
         run: |
+          set -x
+          echo "PATH is $PATH"
           sudo apt-get update
           sudo apt-get install -y unzip wget
           ANDROID_SDK_ROOT="$HOME/Android/Sdk"
@@ -58,6 +60,8 @@ jobs:
 
       - name: Ensure Android platform exists
         run: |
+          set -x
+          echo "PATH is $PATH"
           flutter pub get || true
           if [ ! -d android ]; then
             flutter create --platforms=android --overwrite . || true
@@ -105,6 +109,8 @@ jobs:
       - name: Ensure Linux platform exists
         shell: bash
         run: |
+          set -x
+          echo "PATH is $PATH"
           flutter pub get || true
           if [ ! -d linux ]; then
             flutter create --platforms=linux --overwrite . || true
@@ -112,6 +118,8 @@ jobs:
 
       - name: Install Linux build dependencies
         run: |
+          set -x
+          echo "PATH is $PATH"
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev ruby ruby-dev rubygems build-essential zlib1g-dev libarchive-tools desktop-file-utils wget
           if [ "${{ matrix.arch }}" = "arm64" ]; then
@@ -134,6 +142,8 @@ jobs:
       - name: Package Linux artifacts
         shell: bash
         run: |
+          set -x
+          echo "PATH is $PATH"
           set -euo pipefail
           APP_BUNDLE="build/linux/${{ matrix.arch }}/release/bundle"
           echo "Debug: listing bundle path $APP_BUNDLE"
@@ -202,6 +212,8 @@ jobs:
       - name: Ensure Windows platform exists
         shell: pwsh
         run: |
+          set -x
+          echo "PATH is $PATH"
           flutter pub get || true
           if (-not (Test-Path -Path 'windows')) {
             flutter create --platforms=windows --overwrite .
@@ -219,6 +231,8 @@ jobs:
       - name: Package Windows Release
         shell: pwsh
         run: |
+          set -x
+          echo "PATH is $PATH"
           $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
           Write-Host "Debug: listing build/windows"
           if (Test-Path (Join-Path $PWD 'build/windows')) {
@@ -256,6 +270,8 @@ jobs:
 
       - name: Prepare Release Files
         run: |
+          set -x
+          echo "PATH is $PATH"
           mkdir -p release-assets-final
           find release-assets -type f \( -name '*.apk' -o -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp -v {} release-assets-final/ \;
           ls -R release-assets-final
