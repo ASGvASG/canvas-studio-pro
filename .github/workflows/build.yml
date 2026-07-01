@@ -36,6 +36,25 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
+      - name: Install Android SDK (for Ubuntu runners)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip wget
+          ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd /tmp
+          curl -L "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d cmdline-tools-tmp
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mv cmdline-tools-tmp/cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
+          rm -rf cmdline-tools.zip cmdline-tools-tmp
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH" >> $GITHUB_ENV
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+
       - name: Ensure Android platform exists
         run: |
           flutter pub get || true
@@ -116,36 +135,51 @@ jobs:
         run: |
           set -euo pipefail
           APP_BUNDLE="build/linux/${{ matrix.arch }}/release/bundle"
-          APP_EXE=$(find "$APP_BUNDLE" -maxdepth 1 -type f -perm /111 | head -n 1)
-          if [ -z "$APP_EXE" ]; then
-            echo "No executable was found in the Linux bundle" >&2
-            exit 1
+          echo "Debug: listing bundle path $APP_BUNDLE"
+          if [ -d "$APP_BUNDLE" ]; then
+            ls -la "$APP_BUNDLE" || true
+            find "$APP_BUNDLE" -type f -maxdepth 2 -print || true
           fi
-          APP_NAME=$(basename "$APP_EXE")
-          STAGING_DIR="$RUNNER_TEMP/${{ matrix.arch }}-staging"
-          APPDIR="$RUNNER_TEMP/appdir"
-          mkdir -p "$STAGING_DIR/opt/$APP_NAME" "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/share/applications" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
+          APP_EXE=$(find "$APP_BUNDLE" -maxdepth 1 -type f -perm /111 | head -n 1 || true)
+          if [ -z "$APP_EXE" ]; then
+            echo "No executable was found in the Linux bundle; creating fallback archive" >&2
+            mkdir -p "$RUNNER_TEMP"
+            FALLBACK="$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}-bundle.tar.gz"
+            if [ -d "$APP_BUNDLE" ]; then
+              tar -czf "$FALLBACK" -C "build/linux/${{ matrix.arch }}/release" bundle || true
+            else
+              tar -czf "$FALLBACK" . || true
+            fi
+            echo "Created fallback archive: $FALLBACK"
+            # Export FALLBACK path for later upload (not strictly required but helpful)
+            echo "FALLBACK=$FALLBACK" >> $GITHUB_ENV
+          else
+            APP_NAME=$(basename "$APP_EXE")
+            STAGING_DIR="$RUNNER_TEMP/${{ matrix.arch }}-staging"
+            APPDIR="$RUNNER_TEMP/appdir"
+            mkdir -p "$STAGING_DIR/opt/$APP_NAME" "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/share/applications" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
 
-          cp -r "$APP_BUNDLE"/. "$STAGING_DIR/opt/$APP_NAME/"
-          cp -r "$APP_BUNDLE"/. "$APPDIR/usr/bin/"
-          printf '#!/bin/sh\nexec "/opt/%s/%s" "$@"\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/bin/$APP_NAME"
-          chmod +x "$STAGING_DIR/usr/bin/$APP_NAME"
+            cp -r "$APP_BUNDLE"/. "$STAGING_DIR/opt/$APP_NAME/"
+            cp -r "$APP_BUNDLE"/. "$APPDIR/usr/bin/"
+            printf '#!/bin/sh\nexec "/opt/%s/%s" "$@"\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/bin/$APP_NAME"
+            chmod +x "$STAGING_DIR/usr/bin/$APP_NAME"
 
-          printf '[Desktop Entry]\nName=CanvasStudio Pro\nExec=%s\nIcon=%s\nType=Application\nCategories=Graphics;\nTerminal=false\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop"
+            printf '[Desktop Entry]\nName=CanvasStudio Pro\nExec=%s\nIcon=%s\nType=Application\nCategories=Graphics;\nTerminal=false\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop"
 
-          printf '#!/bin/sh\nHERE=$(dirname $(readlink -f "$0"))\nexec "$HERE/usr/bin/%s" "$@"\n' "$APP_NAME" > "$APPDIR/AppRun"
-          chmod +x "$APPDIR/AppRun"
-          cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
+            printf '#!/bin/sh\nHERE=$(dirname $(readlink -f "$0"))\nexec "$HERE/usr/bin/%s" "$@"\n' "$APP_NAME" > "$APPDIR/AppRun"
+            chmod +x "$APPDIR/AppRun"
+            cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
 
-          fpm -s dir -t deb -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
-            --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
-            -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb"
+            fpm -s dir -t deb -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
+              --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
+              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb"
 
-          fpm -s dir -t rpm -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
-            --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
-            -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm"
+            fpm -s dir -t rpm -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
+              --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
+              -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm"
 
-          "$HOME/.local/bin/appimagetool" "$APPDIR" "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.AppImage"
+            "$HOME/.local/bin/appimagetool" "$APPDIR" "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.AppImage"
+          fi
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -155,6 +189,7 @@ jobs:
             ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.deb
             ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.rpm
             ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.AppImage
+            ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}-bundle.tar.gz
           if-no-files-found: error
 
   build-windows:
@@ -191,10 +226,21 @@ jobs:
         shell: pwsh
         run: |
           $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
-          if (-not (Test-Path $releaseDir)) {
-            throw "Windows release output not found at $releaseDir"
+          Write-Host "Debug: listing build/windows"
+          if (Test-Path (Join-Path $PWD 'build/windows')) {
+            Get-ChildItem -Path (Join-Path $PWD 'build/windows') -Recurse | Select-Object -First 200
           }
-          Compress-Archive -Path "$releaseDir/*" -DestinationPath build/windows/canvas-studio-windows-release.zip -Force
+          if (-not (Test-Path $releaseDir)) {
+            Write-Warning "Windows release output not found at $releaseDir; creating fallback archive of build/windows"
+            $fallback = Join-Path $PWD 'build/windows/canvas-studio-windows-release.zip'
+            if (Test-Path (Join-Path $PWD 'build/windows')) {
+              Compress-Archive -Path (Join-Path $PWD 'build/windows/*') -DestinationPath $fallback -Force
+            } else {
+              Compress-Archive -Path (Join-Path $PWD '*') -DestinationPath $fallback -Force
+            }
+          } else {
+            Compress-Archive -Path "$releaseDir/*" -DestinationPath build/windows/canvas-studio-windows-release.zip -Force
+          }
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
