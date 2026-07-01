@@ -27,7 +27,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version-file: pubspec.yaml # Uses the SDK version defined in pubspec
+
+      - name: Create Android Native Project
+        run: |
+          mkdir -p backup
+          cp -r lib pubspec.yaml backup/
+          flutter create --platforms=android --org com.canvasstudio.pro .
+          cp -r backup/* .
+          rm -rf backup
 
       - name: Install Dependencies
         run: flutter pub get
@@ -52,6 +59,15 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+
+      - name: Create Windows Native Project
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path backup
+          Copy-Item -Recurse -Force -Path lib, pubspec.yaml -Destination backup
+          flutter create --platforms=windows --org com.canvasstudio.pro .
+          Copy-Item -Recurse -Force -Path backup\* -Destination .
+          Remove-Item -Recurse -Force -Path backup
 
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
@@ -89,6 +105,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+
+      - name: Create Linux Native Project
+        run: |
+          mkdir -p backup
+          cp -r lib pubspec.yaml backup/
+          flutter create --platforms=linux --org com.canvasstudio.pro .
+          cp -r backup/* .
+          rm -rf backup
 
       - name: Enable Linux Desktop
         run: flutter config --enable-linux-desktop
