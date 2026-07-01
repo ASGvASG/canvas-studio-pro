@@ -151,33 +151,26 @@ jobs:
               tar -czf "$FALLBACK" . || true
             fi
             echo "Created fallback archive: $FALLBACK"
-            # Export FALLBACK path for later upload (not strictly required but helpful)
             echo "FALLBACK=$FALLBACK" >> $GITHUB_ENV
           else
             APP_NAME=$(basename "$APP_EXE")
             STAGING_DIR="$RUNNER_TEMP/${{ matrix.arch }}-staging"
             APPDIR="$RUNNER_TEMP/appdir"
             mkdir -p "$STAGING_DIR/opt/$APP_NAME" "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/share/applications" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
-
             cp -r "$APP_BUNDLE"/. "$STAGING_DIR/opt/$APP_NAME/"
             cp -r "$APP_BUNDLE"/. "$APPDIR/usr/bin/"
             printf '#!/bin/sh\nexec "/opt/%s/%s" "$@"\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/bin/$APP_NAME"
             chmod +x "$STAGING_DIR/usr/bin/$APP_NAME"
-
             printf '[Desktop Entry]\nName=CanvasStudio Pro\nExec=%s\nIcon=%s\nType=Application\nCategories=Graphics;\nTerminal=false\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop"
-
             printf '#!/bin/sh\nHERE=$(dirname $(readlink -f "$0"))\nexec "$HERE/usr/bin/%s" "$@"\n' "$APP_NAME" > "$APPDIR/AppRun"
             chmod +x "$APPDIR/AppRun"
             cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
-
             fpm -s dir -t deb -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
               --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
               -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb"
-
             fpm -s dir -t rpm -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
               --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/ASGvASG/canvas-studio-pro \
               -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm"
-
             "$HOME/.local/bin/appimagetool" "$APPDIR" "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.AppImage"
           fi
 
@@ -220,7 +213,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows Executable
-        run: flutter build windows --release
+        run: flutter build windows --release --no-pub
 
       - name: Package Windows Release
         shell: pwsh
