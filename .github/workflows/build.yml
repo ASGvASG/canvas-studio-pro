@@ -36,6 +36,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
+      - name: Ensure Android platform exists
+        run: |
+          flutter pub get || true
+          if [ ! -d android ]; then
+            flutter create --platforms=android --overwrite . || true
+          fi
+
       - name: Enable Android target
         run: flutter config --enable-android
 
@@ -74,6 +81,14 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
+
+      - name: Ensure Linux platform exists
+        shell: bash
+        run: |
+          flutter pub get || true
+          if [ ! -d linux ]; then
+            flutter create --platforms=linux --overwrite . || true
+          fi
 
       - name: Install Linux build dependencies
         run: |
@@ -154,6 +169,14 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
+
+      - name: Ensure Windows platform exists
+        shell: pwsh
+        run: |
+          flutter pub get || true
+          if (-not (Test-Path -Path 'windows')) {
+            flutter create --platforms=windows --overwrite .
+          }
 
       - name: Enable Windows desktop target
         run: flutter config --enable-windows-desktop
