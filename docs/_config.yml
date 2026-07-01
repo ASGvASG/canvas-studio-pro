@@ -1,0 +1,7 @@
+title: CanvasStudio Pro
+name: CanvasStudio Pro
+description: Documentation for the Flutter drawing application
+theme: jekyll-theme-cayman
+show_downloads: true
+plugins:
+  - jekyll-seo-tag

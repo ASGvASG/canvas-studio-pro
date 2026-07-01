@@ -1,14 +1,17 @@
 ---
 layout: default
 ---
-# Welcome to CanvasStudio Pro
+# CanvasStudio Pro Documentation
 
-CanvasStudio Pro is a powerful, multi-platform drawing tool designed for artists and professionals.
+CanvasStudio Pro is a professional drawing application for Android, Windows, and Linux, built with Flutter.
 
 ## Documentation
-- [Installation Guide](installation.md)
-- [User Manual](usage.md)
-- [Contributing](contributing.md)
+- [Getting Started](getting-started.md)
+- [Technical Overview](technical-overview.md)
+- [Release Process](release-process.md)
+
+## Release Snapshot
+The current beta release is v0.0.1-beta.1 and publishes APK, ZIP, DEB, RPM, and AppImage artifacts through GitHub Actions.
 
 ---
-*Built with love using Flutter.*
+*Built for modern creative workflows.*

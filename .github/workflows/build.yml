@@ -1,10 +1,18 @@
-name: Build CanvasStudio Pro (Android, Windows, Linux)
+name: Build CanvasStudio Pro
 
 on:
   push:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+  APP_NAME: canvas_studio_flutter
+  RELEASE_VERSION: '0.0.1-beta.1'
 
 jobs:
   build-android:
@@ -14,74 +22,143 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Enable Android and desktop targets
+        run: |
+          flutter config --enable-android
+          flutter create . --project-name=${{ env.APP_NAME }} --platforms=android,linux,windows
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK
-        run: |
-          flutter build apk --release
+      - name: Build Android APK
+        run: flutter build apk --release
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
           name: canvas-studio-android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
 
   build-linux:
     name: Build Linux (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        include:
+          - arch: x64
+            package_arch: amd64
+            target_platform: linux-x64
+          - arch: arm64
+            package_arch: arm64
+            target_platform: linux-arm64
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev binutils-aarch64-linux-gnu
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Enable Linux Desktop
-        run: flutter config --enable-linux-desktop
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev ruby ruby-dev rubygems build-essential zlib1g-dev libarchive-tools desktop-file-utils wget
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          fi
+          sudo gem install --no-document fpm
+          mkdir -p "$HOME/.local/bin"
+          curl -L https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -o "$HOME/.local/bin/appimagetool"
+          chmod +x "$HOME/.local/bin/appimagetool"
 
-      - name: Install Pub Dependencies
+      - name: Enable Linux desktop target
+        run: |
+          flutter config --enable-linux-desktop
+          flutter create . --project-name=${{ env.APP_NAME }} --platforms=android,linux,windows
+
+      - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build Linux Binary
-        run: flutter build linux --release --target-platform=linux-${{ matrix.arch == 'x64' && 'x64' || 'arm64' }}
+      - name: Build Linux Bundle
+        run: flutter build linux --release --target-platform=${{ matrix.target_platform }}
 
-      - name: Package Release
+      - name: Package Linux artifacts
+        shell: bash
         run: |
-          # Simplified packaging logic for demonstration
-          mkdir -p packaging
-          tar -czf packaging/canvas-studio-linux-${{ matrix.arch }}.tar.gz -C build/linux/*/release/bundle .
+          set -euo pipefail
+          APP_BUNDLE="build/linux/${{ matrix.arch }}/release/bundle"
+          APP_EXE="$(find "$APP_BUNDLE" -maxdepth 1 -type f -perm /111 | head -n 1)"
+          if [ -z "$APP_EXE" ]; then
+            echo "No executable was found in the Linux bundle" >&2
+            exit 1
+          fi
+          APP_NAME="$(basename "$APP_EXE")"
+          STAGING_DIR="$RUNNER_TEMP/${{ matrix.arch }}-staging"
+          APPDIR="$RUNNER_TEMP/appdir"
+          mkdir -p "$STAGING_DIR/opt/$APP_NAME" "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/share/applications" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
 
-      - name: Upload Linux Artifact
+          cp -r "$APP_BUNDLE"/. "$STAGING_DIR/opt/$APP_NAME/"
+          cp -r "$APP_BUNDLE"/. "$APPDIR/usr/bin/"
+          cat > "$STAGING_DIR/usr/bin/$APP_NAME" <<EOF
+#!/bin/sh
+exec "/opt/$APP_NAME/$APP_NAME" "$@"
+EOF
+          chmod +x "$STAGING_DIR/usr/bin/$APP_NAME"
+
+          cat > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" <<EOF
+[Desktop Entry]
+Name=CanvasStudio Pro
+Exec=$APP_NAME
+Icon=$APP_NAME
+Type=Application
+Categories=Graphics;
+Terminal=false
+EOF
+
+          cat > "$APPDIR/AppRun" <<EOF
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/$APP_NAME" "$@"
+EOF
+          chmod +x "$APPDIR/AppRun"
+          cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
+
+          fpm -s dir -t deb -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
+            --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/your-username/canvas-studio-flutter \
+            -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.deb"
+
+          fpm -s dir -t rpm -n canvas-studio -v ${{ env.RELEASE_VERSION }} -a ${{ matrix.package_arch }} --prefix / -C "$STAGING_DIR" opt usr \
+            --description "CanvasStudio Pro drawing application" --license MIT --vendor CanvasStudioPro --url https://github.com/your-username/canvas-studio-flutter \
+            -p "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.rpm"
+
+          "$HOME/.local/bin/appimagetool" "$APPDIR" "$RUNNER_TEMP/canvas-studio-${{ matrix.arch }}.AppImage"
+
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: canvas-studio-linux-${{ matrix.arch }}
-          path: packaging/canvas-studio-linux-${{ matrix.arch }}.tar.gz
+          path: |
+            ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.deb
+            ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.rpm
+            ${{ runner.temp }}/canvas-studio-${{ matrix.arch }}.AppImage
+          if-no-files-found: error
 
   build-windows:
     name: Build Windows App
@@ -93,10 +170,13 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Enable Windows Desktop
-        run: flutter config --enable-windows-desktop
+      - name: Enable Windows desktop target
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create . --project-name=${{ env.APP_NAME }} --platforms=android,linux,windows
 
       - name: Install Dependencies
         run: flutter pub get
@@ -104,16 +184,21 @@ jobs:
       - name: Build Windows Executable
         run: flutter build windows --release
 
-      - name: Package Release
+      - name: Package Windows Release
         shell: pwsh
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\canvas-studio-windows-release.zip
+          $releaseDir = Join-Path $PWD 'build/windows/x64/runner/Release'
+          if (-not (Test-Path $releaseDir)) {
+            throw "Windows release output not found at $releaseDir"
+          }
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath build/windows/canvas-studio-windows-release.zip -Force
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: canvas-studio-windows-app
           path: build/windows/canvas-studio-windows-release.zip
+          if-no-files-found: error
 
   create-release:
     name: Create GitHub Release
@@ -123,16 +208,24 @@ jobs:
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare Release Files
+        run: |
+          mkdir -p release-assets-final
+          find release-assets -type f \( -name '*.apk' -o -name '*.zip' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp -v {} release-assets-final/ \;
+          ls -R release-assets-final
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: CanvasStudio Pro v0.0.1-beta.1
+          name: CanvasStudio Pro v${{ env.RELEASE_VERSION }}
           body: |
-            # Release v0.0.1-beta.1
-            Initial beta release of CanvasStudio Pro.
-          files: |
-            canvas-studio-android-apk/app-release.apk
-            canvas-studio-linux-x64/canvas-studio-linux-x64.tar.gz
-            canvas-studio-linux-arm64/canvas-studio-linux-arm64.tar.gz
-            canvas-studio-windows-app/canvas-studio-windows-release.zip
+            # CanvasStudio Pro v${{ env.RELEASE_VERSION }}
+
+            This beta release includes Android, Windows, and Linux builds for both x64 and arm64 platforms.
+            Artifacts include APK, ZIP, DEB, RPM, and AppImage packages.
+          prerelease: true
+          files: release-assets-final/*
+          fail_on_unmatched_files: true

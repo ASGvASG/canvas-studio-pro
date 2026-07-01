@@ -1,6 +1,6 @@
 name: canvas_studio_flutter
 description: A professional multi-platform painting and drawing application built with Flutter.
-version: 1.0.0+1
+version: 0.0.1-beta.1+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
