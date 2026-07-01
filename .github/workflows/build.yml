@@ -116,27 +116,12 @@ jobs:
 
           cp -r "$APP_BUNDLE"/. "$STAGING_DIR/opt/$APP_NAME/"
           cp -r "$APP_BUNDLE"/. "$APPDIR/usr/bin/"
-          cat > "$STAGING_DIR/usr/bin/$APP_NAME" <<EOF
-#!/bin/sh
-exec "/opt/$APP_NAME/$APP_NAME" "$@"
-EOF
+          printf '#!/bin/sh\nexec "/opt/%s/%s" "$@"\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/bin/$APP_NAME"
           chmod +x "$STAGING_DIR/usr/bin/$APP_NAME"
 
-          cat > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" <<EOF
-[Desktop Entry]
-Name=CanvasStudio Pro
-Exec=$APP_NAME
-Icon=$APP_NAME
-Type=Application
-Categories=Graphics;
-Terminal=false
-EOF
+          printf '[Desktop Entry]\nName=CanvasStudio Pro\nExec=%s\nIcon=%s\nType=Application\nCategories=Graphics;\nTerminal=false\n' "$APP_NAME" "$APP_NAME" > "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop"
 
-          cat > "$APPDIR/AppRun" <<EOF
-#!/bin/sh
-HERE=$(dirname $(readlink -f "$0"))
-exec "$HERE/usr/bin/$APP_NAME" "$@"
-EOF
+          printf '#!/bin/sh\nHERE=$(dirname $(readlink -f "$0"))\nexec "$HERE/usr/bin/%s" "$@"\n' "$APP_NAME" > "$APPDIR/AppRun"
           chmod +x "$APPDIR/AppRun"
           cp "$STAGING_DIR/usr/share/applications/${APP_NAME}.desktop" "$APPDIR/usr/share/applications/${APP_NAME}.desktop"
 
