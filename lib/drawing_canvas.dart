@@ -296,7 +296,7 @@ class CanvasPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..color = stroke.color.withOpacity(stroke.opacity * 0.25)
           ..strokeWidth = stroke.size
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, stroke.size / 4);
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, stroke.size / 4);
         drawFreehandPath(canvas, stroke.points, softPaint);
       } else {
         // Normal Pen / Solid Brush
